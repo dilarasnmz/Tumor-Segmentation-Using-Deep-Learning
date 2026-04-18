@@ -18,6 +18,9 @@ Desktop-based deep learning project for breast tumor segmentation, classificatio
 - `data/` dataset folders
 - `notebooks/` experiments
 
+## Current dataset can be found on Kaggle
+https://www.kaggle.com/datasets/abdelrahmanelmugh/cbis-ddsm-512-full1-wm
+
 ## Team
 - Dilara Sönmez
 - Abdelrahman Elmughrabi
