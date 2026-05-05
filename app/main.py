@@ -5,8 +5,9 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
-
+from src.inference import TumorInferenceEngine
 from PySide6.QtCore import QThread, Qt, Signal, QRectF
+
 from PySide6.QtGui import (
     QAction,
     QColor,
@@ -57,14 +58,8 @@ class AnalysisResult:
 
 
 class AnalysisEngine:
-    """
-    1. load image
-    2. preprocess
-    3. segmentation inference
-    4. classification inference
-    5. Grad-CAM generation
-    6. return visualization assets
-    """
+    def __init__(self):
+        self.inference_engine = TumorInferenceEngine()
 
     def analyze(self, image_path: str, progress_callback) -> AnalysisResult:
         pixmap = QPixmap(image_path)
@@ -72,31 +67,23 @@ class AnalysisEngine:
             raise ValueError("The selected file could not be opened as an image.")
 
         progress_callback(10, "Loading image...")
-        time.sleep(0.3)
-
         progress_callback(30, "Preprocessing image...")
-        time.sleep(0.5)
-
         progress_callback(55, "Running segmentation model...")
-        segmentation_overlay = self._create_segmentation_overlay(pixmap)
-        time.sleep(0.7)
-
         progress_callback(75, "Running classification model...")
-        predicted_label, confidence = self._classify_placeholder(image_path)
-        time.sleep(0.6)
-
         progress_callback(90, "Generating Grad-CAM visualization...")
-        gradcam_overlay = self._create_gradcam_overlay(pixmap)
-        time.sleep(0.5)
+
+        predicted_label, confidence, segmentation_overlay, gradcam_overlay = (
+            self.inference_engine.predict(image_path)
+        )
 
         progress_callback(100, "Analysis completed.")
 
         summary_text = (
             f"Prediction: {predicted_label}\n"
             f"Confidence: {confidence * 100:.1f}%\n\n"
-            "This is currently a UI prototype using placeholder inference logic. "
-            "Replace the AnalysisEngine methods with the trained segmentation, "
-            "classification, and Grad-CAM modules from your project."
+            "Result generated using the trained deep learning model.\n"
+            "Segmentation overlay highlights the predicted suspicious region.\n"
+            "Grad-CAM visualization shows the image regions that influenced the classification output."
         )
 
         return AnalysisResult(
