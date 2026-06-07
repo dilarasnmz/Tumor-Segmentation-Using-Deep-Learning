@@ -216,7 +216,8 @@ tmp_format_check/
 
 # Training run outputs
 runs/
-outputs/yolo_run85/
+outputs/
+outputs/debug/
 
 # Archive folder (safe backup, not tracked)
 _archive/

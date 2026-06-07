@@ -715,13 +715,8 @@ class TumorInferenceEngine:
 
         mask_bin = (out["mask"] > self.config.mask_threshold).astype(np.uint8) * 255
         if label == "No Detection":
-            traces = out.get("low_conf_probe_detections", [])
-            if traces:
-                segmentation_rgb = self.create_traces_overlay(out["rgb"], traces, "YOLO traces (Below 20% conf)")
-                gradcam_rgb = self.create_traces_overlay(out["rgb"], traces, "No Grad-CAM available")
-            else:
-                segmentation_rgb = self.create_no_detection_placeholder(out["rgb"], "No detection available")
-                gradcam_rgb = self.create_no_detection_placeholder(out["rgb"], "No Grad-CAM available")
+            segmentation_rgb = out["rgb"].copy()
+            gradcam_rgb = out["rgb"].copy()
             segmentation_pixmap = self.cv_to_pixmap(segmentation_rgb)
             gradcam_pixmap = self.cv_to_pixmap(gradcam_rgb)
         else:
@@ -751,7 +746,24 @@ class TumorInferenceEngine:
             confidence * 100.0,
         )
 
-        return label, confidence, segmentation_pixmap, gradcam_pixmap
+        yolo_boxes = []
+        if dets:
+            for d in dets:
+                yolo_boxes.append({
+                    "box": d["box"],
+                    "conf": d["conf"],
+                    "is_trace": False
+                })
+        else:
+            traces = out.get("low_conf_probe_detections", [])
+            for t in traces[:3]:
+                yolo_boxes.append({
+                    "box": tuple(map(int, t["box_xyxy"])),
+                    "conf": t["confidence"],
+                    "is_trace": True
+                })
+        
+        return label, confidence, segmentation_pixmap, gradcam_pixmap, yolo_boxes
 
     @staticmethod
     def create_traces_overlay(rgb: np.ndarray, traces: list[dict], message: str) -> np.ndarray:

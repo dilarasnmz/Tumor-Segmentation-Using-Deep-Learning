@@ -28,6 +28,7 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QFileDialog,
     QFrame,
     QGridLayout,
@@ -70,6 +71,7 @@ class AnalysisResult:
     segmentation_overlay: QPixmap
     gradcam_overlay: QPixmap
     summary_text: str
+    yolo_boxes: list = None
 
 
 class AnalysisEngine:
@@ -87,7 +89,7 @@ class AnalysisEngine:
         progress_callback(75, "Running classification model...")
         progress_callback(90, "Generating Grad-CAM visualization...")
 
-        predicted_label, confidence, segmentation_overlay, gradcam_overlay = (
+        predicted_label, confidence, segmentation_overlay, gradcam_overlay, yolo_boxes = (
             self.inference_engine.predict(image_path)
         )
         logger.debug("[APP DEBUG] final predicted label from inference: %s", predicted_label)
@@ -123,6 +125,7 @@ class AnalysisEngine:
             segmentation_overlay=segmentation_overlay,
             gradcam_overlay=gradcam_overlay,
             summary_text=summary_text,
+            yolo_boxes=yolo_boxes,
         )
     #next 3 methods are placeholders to simulate the behavior of the actual analysis components.
     def _classify_placeholder(self, image_path: str) -> tuple[str, float]:
@@ -545,6 +548,23 @@ class ResultsPage(QWidget):
         grid.addWidget(self.gradcam_panel, 1, 0)
         grid.addWidget(self.summary_box, 1, 1)
 
+        self.show_yolo_cb = QCheckBox("Show YOLO Bounding Box")
+        self.show_heatmap_cb = QCheckBox("Show Overlays (Heatmap / Mask)")
+        self.show_yolo_cb.setChecked(True)
+        self.show_heatmap_cb.setChecked(True)
+        self.show_yolo_cb.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.show_heatmap_cb.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        view_opts = QHBoxLayout()
+        view_opts.setSpacing(15)
+        view_opts.addWidget(QLabel("<b>View Options:</b>"))
+        view_opts.addWidget(self.show_yolo_cb)
+        view_opts.addWidget(self.show_heatmap_cb)
+        view_opts.addStretch(1)
+
+        self.show_yolo_cb.stateChanged.connect(self._update_panels)
+        self.show_heatmap_cb.stateChanged.connect(self._update_panels)
+
         button_row = QHBoxLayout()
         button_row.setSpacing(10)
         self.back_button = QPushButton("Analyze Another Scan")
@@ -560,20 +580,14 @@ class ResultsPage(QWidget):
         button_row.addWidget(self.rerun_button)
 
         root.addWidget(header)
+        root.addLayout(view_opts)
         root.addLayout(grid, stretch=1)
         root.addLayout(button_row)
+        
+        self._current_result: Optional[AnalysisResult] = None
 
     def set_result(self, result: AnalysisResult) -> None:
-        if result.predicted_label == "No Detection":
-            segmentation_view = result.segmentation_overlay
-            gradcam_view = result.gradcam_overlay
-        else:
-            segmentation_view = blend_pixmaps(result.original_pixmap, result.segmentation_overlay, 1.0)
-            gradcam_view = blend_pixmaps(result.original_pixmap, result.gradcam_overlay, 1.0)
-
-        self.original_panel.set_display_pixmap(result.original_pixmap)
-        self.segmentation_panel.set_display_pixmap(segmentation_view)
-        self.gradcam_panel.set_display_pixmap(gradcam_view)
+        self._current_result = result
         self.summary_label.setText(result.summary_text)
         displayed_confidence = f"{result.confidence * 100:.1f}%"
         logger.debug(
@@ -584,6 +598,52 @@ class ResultsPage(QWidget):
         self.confidence_value.setText(displayed_confidence)
         self.prediction_badge.setText(result.predicted_label)
         self._set_prediction_tone(result.predicted_label)
+        self._update_panels()
+
+    def _update_panels(self) -> None:
+        if not self._current_result:
+            return
+            
+        result = self._current_result
+        
+        if result.predicted_label == "No Detection":
+            seg_base = result.original_pixmap.copy()
+            cam_base = result.original_pixmap.copy()
+        else:
+            if self.show_heatmap_cb.isChecked():
+                seg_base = result.segmentation_overlay.copy()
+                cam_base = result.gradcam_overlay.copy()
+            else:
+                seg_base = result.original_pixmap.copy()
+                cam_base = result.original_pixmap.copy()
+                
+        if self.show_yolo_cb.isChecked() and result.yolo_boxes:
+            for view in [seg_base, cam_base]:
+                painter = QPainter(view)
+                font = painter.font()
+                font.setPixelSize(max(10, view.width() // 35))
+                painter.setFont(font)
+                for box_dict in result.yolo_boxes:
+                    x0, y0, x1, y1 = box_dict["box"]
+                    conf = box_dict["conf"]
+                    is_trace = box_dict["is_trace"]
+                    
+                    color = QColor(255, 255, 0) if is_trace else QColor(0, 255, 0) # Yellow for traces, Lime for detections
+                    
+                    pen = QPen(color, max(2, view.width() // 200))
+                    if is_trace:
+                        pen.setStyle(Qt.PenStyle.DashLine)
+                    painter.setPen(pen)
+                    painter.drawRect(int(x0), int(y0), int(x1-x0), int(y1-y0))
+                    
+                    # Draw text label
+                    label_text = f"Trace {conf*100:.1f}%" if is_trace else f"YOLO {conf*100:.1f}%"
+                    painter.drawText(int(x0), max(20, int(y0) - 5), label_text)
+                painter.end()
+                
+        self.original_panel.set_display_pixmap(result.original_pixmap)
+        self.segmentation_panel.set_display_pixmap(seg_base)
+        self.gradcam_panel.set_display_pixmap(cam_base)
 
     def clear_result(self) -> None:
         self.original_panel.clear_panel()
