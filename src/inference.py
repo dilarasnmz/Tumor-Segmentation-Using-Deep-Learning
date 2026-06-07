@@ -14,6 +14,7 @@ import yaml
 from PySide6.QtGui import QImage, QPixmap
 
 from src.model import MTL_EfficientUNetPlusPlus, Run85UNetPlusPlus
+from src.run831_pipeline import Run831Pipeline
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -83,6 +84,9 @@ class TumorInferenceEngine:
         self.legacy_gradcam = None
         self._last_debug_dir: Path | None = None
 
+        # Run 8.31 clean pipeline (replaces the old _predict_run85_numpy path)
+        self._run831: Run831Pipeline | None = None
+
     @staticmethod
     def _safe_stem(path: str) -> str:
         return "".join(c if c.isalnum() or c in "-_" else "_" for c in Path(path).stem) or "image"
@@ -147,8 +151,8 @@ class TumorInferenceEngine:
 
     def _load_config(self) -> InferenceConfig:
         defaults = {
-            "segmentation_model_path": "models/best_yolo.pt",
-            "classifier_model_path": "models/best_classifier.pth",
+            "segmentation_model_path": "models/detector_yolov8s.pt",
+            "classifier_model_path": "models/segmenter_bias_fixed_2cls.pth",
             "image_size": 512,
             "confidence_threshold": 0.25,
             "mask_threshold": 0.5,
@@ -210,16 +214,25 @@ class TumorInferenceEngine:
 
                 if isinstance(state, dict) and "temperature" in state:
                     wrapped = ModelWithTemperature(base).to(DEVICE)
-                    wrapped.load_state_dict(state)
+                    fixed_state = {}
+                    for k, v in state.items():
+                        if k.startswith("model.") and not k.startswith("model.model."):
+                            fixed_state[k.replace("model.", "model.model.", 1)] = v
+                        else:
+                            fixed_state[k] = v
+                    wrapped.load_state_dict(fixed_state, strict=False)
                     self.classifier = wrapped
                 else:
-                    if isinstance(state, dict) and any(k.startswith("model.") for k in state.keys()):
-                        state = {
-                            k.replace("model.", "", 1): v
-                            for k, v in state.items()
-                            if k != "temperature"
-                        }
-                    base.load_state_dict(state, strict=False)
+                    fixed_state = {}
+                    for k, v in state.items():
+                        if k == "temperature":
+                            continue
+                        # If state dict keys don't start with model. but base expects model.
+                        if not k.startswith("model."):
+                            fixed_state["model." + k] = v
+                        else:
+                            fixed_state[k] = v
+                    base.load_state_dict(fixed_state, strict=False)
                     self.classifier = base
 
                 self.classifier.eval()
@@ -250,12 +263,22 @@ class TumorInferenceEngine:
                 except Exception:
                     self.gradcam = None
 
-                print(f"[INFERENCE] ✅ YOLO two-stage pipeline ready")
+                # ── Instantiate the clean Run 8.31 pipeline ──────────────
+                self._run831 = Run831Pipeline(
+                    yolo_path=self.config.segmentation_model_path,
+                    classifier_path=self.config.classifier_model_path,
+                    device=DEVICE,
+                )
+                self._run831.load()
+
+                print(f"[INFERENCE] \u2705 YOLO two-stage pipeline ready (Run831Pipeline)")
                 self._loaded = True
                 return
 
             except Exception as e:
-                print(f"[INFERENCE] ⚠️  YOLO pipeline failed: {e}")
+                import traceback
+                traceback.print_exc()
+                print(f"[INFERENCE] \u26a0\ufe0f  YOLO pipeline failed: {e}")
                 print(f"[INFERENCE] Falling back to legacy pipeline...")
 
         else:
@@ -537,22 +560,32 @@ class TumorInferenceEngine:
                 with torch.no_grad():
                     seg, cls = self.classifier(x)
 
-                x0_b = max(0, cx_b - self.config.physical_window_px // 2)
-                y0_b = max(0, cy_b - self.config.physical_window_px // 2)
-                x1_b = min(w, cx_b + self.config.physical_window_px // 2)
-                y1_b = min(h, cy_b + self.config.physical_window_px // 2)
+                win_px = self.config.physical_window_px
+                half = win_px // 2
 
-                pm = cv2.resize(
+                x0_b = max(0, cx_b - half)
+                y0_b = max(0, cy_b - half)
+                x1_b = min(w, cx_b + half)
+                y1_b = min(h, cy_b + half)
+
+                pad_left = max(0, -(cx_b - half))
+                pad_top = max(0, -(cy_b - half))
+                valid_w = x1_b - x0_b
+                valid_h = y1_b - y0_b
+
+                pm_full = cv2.resize(
                     torch.sigmoid(seg)[0, 0].cpu().numpy(),
-                    (x1_b - x0_b, y1_b - y0_b),
+                    (win_px, win_px),
                     interpolation=cv2.INTER_LINEAR,
                 )
-                full_mask[y0_b:y1_b, x0_b:x1_b] = np.maximum(full_mask[y0_b:y1_b, x0_b:x1_b], pm)
+                pm_valid = pm_full[pad_top : pad_top + valid_h, pad_left : pad_left + valid_w]
+                full_mask[y0_b:y1_b, x0_b:x1_b] = np.maximum(full_mask[y0_b:y1_b, x0_b:x1_b], pm_valid)
 
                 if self.gradcam is not None:
                     cam = self.gradcam(input_tensor=x, targets=[ClassifierOutputTarget(1)])[0]
-                    cam = cv2.resize(cam, (x1_b - x0_b, y1_b - y0_b), interpolation=cv2.INTER_LINEAR)
-                    full_cam[y0_b:y1_b, x0_b:x1_b] = np.maximum(full_cam[y0_b:y1_b, x0_b:x1_b], cam)
+                    cam_full = cv2.resize(cam, (win_px, win_px), interpolation=cv2.INTER_LINEAR)
+                    cam_valid = cam_full[pad_top : pad_top + valid_h, pad_left : pad_left + valid_w]
+                    full_cam[y0_b:y1_b, x0_b:x1_b] = np.maximum(full_cam[y0_b:y1_b, x0_b:x1_b], cam_valid)
 
                 raw_logits, p_benign, p_malig = self.class_probabilities_from_logits(cls)
                 logger.debug(
@@ -657,8 +690,9 @@ class TumorInferenceEngine:
 
     def predict_numpy(self, image_path: str):
         self._lazy_load()
-        if self._mode == "run85":
-            return self._predict_run85_numpy(image_path)
+        if self._mode == "run85" and self._run831 is not None:
+            # Delegate entirely to the clean Run 8.31 pipeline module
+            return self._run831.predict(image_path)
         return self._predict_legacy_numpy(image_path)
 
     def predict(self, image_path: str):
@@ -666,7 +700,12 @@ class TumorInferenceEngine:
 
         dets = out.get("dets", [])
         if dets:
-            selected_detection = max(dets, key=lambda d: d.get("p_malig", 0.0))
+            malignant_dets = [d for d in dets if d.get("p_malig", 0.0) >= 0.5]
+            if malignant_dets:
+                selected_detection = max(malignant_dets, key=lambda d: d.get("p_malig", 0.0))
+            else:
+                selected_detection = max(dets, key=lambda d: d.get("p_benign", 0.0))
+                
             p_malig = float(selected_detection.get("p_malig", 0.0))
             label = "Malignant" if p_malig >= 0.5 else "Benign"
             confidence = p_malig if label == "Malignant" else 1.0 - p_malig
@@ -676,8 +715,13 @@ class TumorInferenceEngine:
 
         mask_bin = (out["mask"] > self.config.mask_threshold).astype(np.uint8) * 255
         if label == "No Detection":
-            segmentation_rgb = self.create_no_detection_placeholder(out["rgb"], "No detection available")
-            gradcam_rgb = self.create_no_detection_placeholder(out["rgb"], "No Grad-CAM available")
+            traces = out.get("low_conf_probe_detections", [])
+            if traces:
+                segmentation_rgb = self.create_traces_overlay(out["rgb"], traces, "YOLO traces (Below 20% conf)")
+                gradcam_rgb = self.create_traces_overlay(out["rgb"], traces, "No Grad-CAM available")
+            else:
+                segmentation_rgb = self.create_no_detection_placeholder(out["rgb"], "No detection available")
+                gradcam_rgb = self.create_no_detection_placeholder(out["rgb"], "No Grad-CAM available")
             segmentation_pixmap = self.cv_to_pixmap(segmentation_rgb)
             gradcam_pixmap = self.cv_to_pixmap(gradcam_rgb)
         else:
@@ -710,6 +754,31 @@ class TumorInferenceEngine:
         return label, confidence, segmentation_pixmap, gradcam_pixmap
 
     @staticmethod
+    def create_traces_overlay(rgb: np.ndarray, traces: list[dict], message: str) -> np.ndarray:
+        overlay = rgb.copy()
+        
+        # Dim the image slightly so the traces pop out
+        overlay = cv2.addWeighted(overlay, 0.6, np.zeros_like(overlay), 0.4, 0)
+        
+        for t in traces[:3]:
+            box = t["box_xyxy"]
+            conf = t["confidence"]
+            x0, y0, x1, y1 = map(int, box)
+            
+            # Draw dashed effect by drawing a rectangle, then overlaying it with another
+            cv2.rectangle(overlay, (x0, y0), (x1, y1), (0, 255, 255), 2)
+            
+            # Text background
+            label = f"{conf*100:.1f}%"
+            (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+            cv2.rectangle(overlay, (x0, y0 - th - 5), (x0 + tw, y0), (0, 255, 255), -1)
+            cv2.putText(overlay, label, (x0, y0 - 3), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
+            
+        h, w = rgb.shape[:2]
+        cv2.putText(overlay, message, (10, h - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (230, 230, 230), 2)
+        return overlay
+
+    @staticmethod
     def create_no_detection_placeholder(rgb: np.ndarray, message: str) -> np.ndarray:
         h, w = rgb.shape[:2]
         placeholder = np.full((h, w, 3), 20, dtype=np.uint8)
@@ -735,11 +804,17 @@ class TumorInferenceEngine:
 
     @staticmethod
     def create_heatmap_overlay_rgb(rgb: np.ndarray, heat: np.ndarray) -> np.ndarray:
-        heat = np.clip(heat, 0.0, 1.0)
-        heat_u8 = np.uint8(255 * heat)
-        heatmap = cv2.applyColorMap(heat_u8, cv2.COLORMAP_JET)
-        heatmap = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
-        return cv2.addWeighted(rgb, 0.6, heatmap, 0.4, 0)
+        try:
+            from pytorch_grad_cam.utils.image import show_cam_on_image
+            heat = np.clip(heat, 0.0, 1.0)
+            overlay = show_cam_on_image(rgb.astype(np.float32) / 255.0, heat, use_rgb=True)
+            return overlay
+        except ImportError:
+            heat = np.clip(heat, 0.0, 1.0)
+            heat_u8 = np.uint8(255 * heat)
+            heatmap = cv2.applyColorMap(heat_u8, cv2.COLORMAP_JET)
+            heatmap = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
+            return cv2.addWeighted(rgb, 0.6, heatmap, 0.4, 0)
 
     def create_heatmap_overlay(self, rgb: np.ndarray, heat: np.ndarray):
         return self.cv_to_pixmap(self.create_heatmap_overlay_rgb(rgb, heat))

@@ -1,0 +1,35 @@
+{
+  "image_path": "E:/grad proj dataset/CBIS-DDSM-512-FULL1/full/Calc-Training_P_00078_LEFT_MLO_FULL_288440275513377820221999228512109641096.png",
+  "mode": "run85",
+  "label": "Benign",
+  "detection_count": 1,
+  "raw_detections": [
+    {
+      "box_xyxy": [
+        401.11798095703125,
+        286.04046630859375,
+        423.5425720214844,
+        312.4103088378906
+      ],
+      "confidence": 0.2399209886789322
+    }
+  ],
+  "low_conf_probe_detection_count": 0,
+  "low_conf_probe_detections": [],
+  "stage2_detections": [
+    {
+      "box": [
+        395,
+        279,
+        429,
+        319
+      ],
+      "conf": 0.2399209886789322,
+      "p_benign": 0.8642618656158447,
+      "p_malig": 0.1357380747795105,
+      "label": "Benign"
+    }
+  ],
+  "mask_max": 0.001318510971032083,
+  "cam_max": 0.9868060350418091
+}

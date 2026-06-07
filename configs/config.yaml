@@ -7,14 +7,14 @@ model:
   # Detects and roughly segments candidate mass regions.
   # Used as the first stage of the two-stage production pipeline.
   # Active when this file exists AND classifier_model_path also exists.
-  segmentation_model_path: models/best_yolo.pt
+  segmentation_model_path: models/detector_yolov8s.pt
 
   # ── Stage-2: UNet++ Classifier/Refiner (PRIMARY) ──────────────────────────
   # Run85UNetPlusPlus model fine-tuned on CBIS-DDSM crops produced by Stage-1.
   # Takes a fixed-size crop around each YOLO detection, performs dense
   # segmentation, and classifies the crop as BENIGN (0) or MALIGNANT (1).
   # Active when this file exists AND segmentation_model_path also exists.
-  classifier_model_path: models/best_classifier.pth
+  classifier_model_path: models/segmenter_bias_fixed_2cls.pth
 
   # ── Legacy Fallback Model (FALLBACK ONLY) ─────────────────────────────────
   # MTL_EfficientUNetPlusPlus single-model that was the previous stable release.
@@ -31,8 +31,8 @@ model:
   prefer_yolo: true
 
   # ── Inference parameters ───────────────────────────────────────────────────
-  image_size: 512          # Resize dimension fed to Stage-2 UNet++ (pixels)
-  confidence_threshold: 0.01  # Minimum YOLO confidence to accept a detection
+  image_size: 256          # Resize dimension fed to Stage-2 UNet++ (pixels)
+  confidence_threshold: 0.2  # Minimum YOLO confidence to accept a detection
   mask_threshold: 0.5      # Binary threshold applied to Stage-2 segmentation output
   yolo_iou: 0.8            # IoU threshold for YOLO internal NMS
   yolo_topk: 3             # Maximum detections forwarded to Stage-2 per image

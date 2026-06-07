@@ -1,0 +1,35 @@
+{
+  "image_path": "E:/grad proj dataset/CBIS-DDSM-512-FULL1/full/Calc-Training_P_00010_LEFT_CC_FULL_421728145511593703016785430230794493052.png",
+  "mode": "run85",
+  "label": "Malignant",
+  "detection_count": 1,
+  "raw_detections": [
+    {
+      "box_xyxy": [
+        119.9605484008789,
+        102.55168151855469,
+        145.9456024169922,
+        126.49983215332031
+      ],
+      "confidence": 0.39314714074134827
+    }
+  ],
+  "low_conf_probe_detection_count": 0,
+  "low_conf_probe_detections": [],
+  "stage2_detections": [
+    {
+      "box": [
+        113,
+        96,
+        152,
+        132
+      ],
+      "conf": 0.39314714074134827,
+      "p_benign": 0.20479555428028107,
+      "p_malig": 0.7952044010162354,
+      "label": "Malignant"
+    }
+  ],
+  "mask_max": 1.997731260416913e-06,
+  "cam_max": 1.997731260416913e-06
+}

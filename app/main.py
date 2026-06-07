@@ -50,7 +50,7 @@ PREVIEW_WIDTH = 420
 PREVIEW_HEIGHT = 300
 RESULT_WIDTH = 360
 RESULT_HEIGHT = 250
-SUPPORTED_FILTER = "Images (*.png *.jpg *.jpeg *.bmp *.tif *.tiff)" #example supported formats, adjust as needed
+SUPPORTED_FILTER = "Images (*.png *.jpg *.jpeg *.bmp *.tif *.tiff *.dcm)"
 
 logger = logging.getLogger(__name__)
 if not logger.handlers:
