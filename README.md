@@ -193,10 +193,10 @@ Tumor-Segmentation-Using-Deep-Learning/
 |  |- config.yaml
 |- data/
 |- docs/
-|- models/
-|  |- best_model.pth
-|  |- best_yolo.pt
-|  |- best_classifier.pth
+|- models/                  ← deployed inference weights (do not delete)
+|  |- best_yolo.pt          ← Stage-1 YOLO detector          (PRIMARY)
+|  |- best_classifier.pth   ← Stage-2 UNet++ classifier       (PRIMARY)
+|  |- best_model.pth        ← Legacy single-model backup      (FALLBACK ONLY)
 |- notebooks/
 |  |- final_experiment.ipynb
 |  |- archive/

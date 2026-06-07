@@ -1,0 +1,11 @@
+{
+  "crop_size": 512,
+  "crop_margin": 0.25,
+  "yolo_conf": 0.2,
+  "yolo_topk": 3,
+  "classes": 2,
+  "labels": {
+    "0": "Benign",
+    "1": "Malignant"
+  }
+}

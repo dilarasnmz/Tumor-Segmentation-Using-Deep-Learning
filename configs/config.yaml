@@ -2,22 +2,42 @@ project:
   name: Tumor-Segmentation-Using-Deep-Learning
 
 model:
-  # Primary YOLO-based two-stage pipeline
+  # ── Stage-1: YOLO Detector (PRIMARY) ─────────────────────────────────────
+  # YOLOv8-seg model trained on CBIS-DDSM mammograms.
+  # Detects and roughly segments candidate mass regions.
+  # Used as the first stage of the two-stage production pipeline.
+  # Active when this file exists AND classifier_model_path also exists.
   segmentation_model_path: models/best_yolo.pt
+
+  # ── Stage-2: UNet++ Classifier/Refiner (PRIMARY) ──────────────────────────
+  # Run85UNetPlusPlus model fine-tuned on CBIS-DDSM crops produced by Stage-1.
+  # Takes a fixed-size crop around each YOLO detection, performs dense
+  # segmentation, and classifies the crop as BENIGN (0) or MALIGNANT (1).
+  # Active when this file exists AND segmentation_model_path also exists.
   classifier_model_path: models/best_classifier.pth
-  # Legacy single-model fallback (used only when YOLO models are missing)
+
+  # ── Legacy Fallback Model (FALLBACK ONLY) ─────────────────────────────────
+  # MTL_EfficientUNetPlusPlus single-model that was the previous stable release.
+  # Loaded ONLY when one or both of the YOLO pipeline files above are missing.
+  # Never used when the two-stage YOLO pipeline is available.
+  # Do NOT delete this file; it keeps the app runnable if YOLO files are lost.
   legacy_backup_model_path: models/best_model.pth
-  # Prefer YOLO pipeline when available (set to false only for explicit legacy-only mode)
+
+  # ── Pipeline selection logic (informational) ───────────────────────────────
+  # src/inference.py follows this priority at startup:
+  #   1. If best_yolo.pt AND best_classifier.pth exist  → YOLO two-stage (mode=run85)
+  #   2. Otherwise                                       → Legacy single-model (mode=legacy)
+  # The active mode is printed to the terminal on every app launch.
   prefer_yolo: true
-  
-  # Inference parameters
-  image_size: 512
-  confidence_threshold: 0.01
-  mask_threshold: 0.5
-  yolo_iou: 0.8
-  yolo_topk: 3
-  second_nms_iou: 0.3
-  physical_window_px: 320
+
+  # ── Inference parameters ───────────────────────────────────────────────────
+  image_size: 512          # Resize dimension fed to Stage-2 UNet++ (pixels)
+  confidence_threshold: 0.01  # Minimum YOLO confidence to accept a detection
+  mask_threshold: 0.5      # Binary threshold applied to Stage-2 segmentation output
+  yolo_iou: 0.8            # IoU threshold for YOLO internal NMS
+  yolo_topk: 3             # Maximum detections forwarded to Stage-2 per image
+  second_nms_iou: 0.3      # Second-pass NMS IoU applied after YOLO to remove duplicates
+  physical_window_px: 320  # Crop size (px) extracted around each YOLO detection centre
 
 paths:
   master_csv: data/CBIS_Master_Index.csv
