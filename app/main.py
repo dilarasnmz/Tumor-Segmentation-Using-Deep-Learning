@@ -1,5 +1,6 @@
 from __future__ import annotations
 import hashlib
+import logging
 import sys
 import time
 from dataclasses import dataclass
@@ -51,6 +52,14 @@ RESULT_WIDTH = 360
 RESULT_HEIGHT = 250
 SUPPORTED_FILTER = "Images (*.png *.jpg *.jpeg *.bmp *.tif *.tiff)" #example supported formats, adjust as needed
 
+logger = logging.getLogger(__name__)
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
+    logger.addHandler(handler)
+logger.setLevel(logging.DEBUG)
+logger.propagate = False
+
 
 @dataclass
 class AnalysisResult:
@@ -81,16 +90,30 @@ class AnalysisEngine:
         predicted_label, confidence, segmentation_overlay, gradcam_overlay = (
             self.inference_engine.predict(image_path)
         )
+        logger.debug("[APP DEBUG] final predicted label from inference: %s", predicted_label)
+        logger.debug(
+            "[APP DEBUG] final displayed confidence from inference: %.4f (%.1f%%)",
+            confidence,
+            confidence * 100.0,
+        )
 
         progress_callback(100, "Analysis completed.")
 
-        summary_text = (
-            f"Prediction: {predicted_label}\n"
-            f"Confidence: {confidence * 100:.1f}%\n\n"
-            "Result generated using the trained deep learning model.\n"
-            "Segmentation overlay highlights the predicted suspicious region.\n"
-            "Grad-CAM visualization shows the image regions that influenced the classification output."
-        )
+        if predicted_label == "No Detection":
+            summary_text = (
+                f"Prediction: {predicted_label}\n"
+                f"Confidence: {confidence * 100:.1f}%\n\n"
+                "YOLO did not find a suspicious region above the configured threshold.\n"
+                "Stage-2 classification was not forced for this image."
+            )
+        else:
+            summary_text = (
+                f"Prediction: {predicted_label}\n"
+                f"Confidence: {confidence * 100:.1f}%\n\n"
+                "Result generated using the trained deep learning model.\n"
+                "Segmentation overlay highlights the predicted suspicious region.\n"
+                "Grad-CAM visualization shows the image regions that influenced the classification output."
+            )
 
         return AnalysisResult(
             image_path=image_path,
@@ -541,14 +564,24 @@ class ResultsPage(QWidget):
         root.addLayout(button_row)
 
     def set_result(self, result: AnalysisResult) -> None:
-        segmentation_view = blend_pixmaps(result.original_pixmap, result.segmentation_overlay, 1.0)
-        gradcam_view = blend_pixmaps(result.original_pixmap, result.gradcam_overlay, 1.0)
+        if result.predicted_label == "No Detection":
+            segmentation_view = result.segmentation_overlay
+            gradcam_view = result.gradcam_overlay
+        else:
+            segmentation_view = blend_pixmaps(result.original_pixmap, result.segmentation_overlay, 1.0)
+            gradcam_view = blend_pixmaps(result.original_pixmap, result.gradcam_overlay, 1.0)
 
         self.original_panel.set_display_pixmap(result.original_pixmap)
         self.segmentation_panel.set_display_pixmap(segmentation_view)
         self.gradcam_panel.set_display_pixmap(gradcam_view)
         self.summary_label.setText(result.summary_text)
-        self.confidence_value.setText(f"{result.confidence * 100:.1f}%")
+        displayed_confidence = f"{result.confidence * 100:.1f}%"
+        logger.debug(
+            "[APP DEBUG] GUI rendered label=%s confidence=%s",
+            result.predicted_label,
+            displayed_confidence,
+        )
+        self.confidence_value.setText(displayed_confidence)
         self.prediction_badge.setText(result.predicted_label)
         self._set_prediction_tone(result.predicted_label)
 

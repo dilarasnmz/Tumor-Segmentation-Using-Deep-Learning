@@ -24,18 +24,24 @@ class GradCAM:
         self.target_layer.register_forward_hook(forward_hook)
         self.target_layer.register_full_backward_hook(backward_hook)
 
-    def generate(self, input_tensor):
+    def generate(self, input_tensor, target_class: int = 1):
         self.model.zero_grad()
 
         seg_out, cls_out = self.model(input_tensor)
 
-        # classification score
-        score = cls_out.squeeze()
+        # Notebook-aligned class targeting: class index 1 is malignant for 2-class heads.
+        if cls_out.ndim == 2 and cls_out.shape[1] > 1:
+            score = cls_out[:, target_class].sum()
+        else:
+            score = cls_out.squeeze()
 
         score.backward(retain_graph=True)
 
         gradients = self.gradients
         activations = self.activations
+
+        if gradients is None or activations is None:
+            raise RuntimeError("GradCAM hooks did not capture gradients/activations")
 
         # GAP (global average pooling)
         weights = torch.mean(gradients, dim=(2, 3), keepdim=True)
@@ -44,7 +50,7 @@ class GradCAM:
 
         cam = F.relu(cam)
 
-        cam = cam.squeeze().cpu().numpy()
+        cam = cam.squeeze().detach().cpu().numpy()
 
         # normalize
         cam -= np.min(cam)

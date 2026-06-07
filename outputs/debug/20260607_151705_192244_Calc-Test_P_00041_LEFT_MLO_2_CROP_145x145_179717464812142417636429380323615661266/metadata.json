@@ -1,0 +1,12 @@
+{
+  "image_path": "C:/Users/dilar/OneDrive/Desktop/Tumor-Segmentation-Using-Deep-Learning/data/CBIS-DDSM-512-FULL1/CBIS-DDSM-512-FULL1/cropped/Calc-Test_P_00041_LEFT_MLO_2_CROP_145x145_179717464812142417636429380323615661266.png",
+  "mode": "run85",
+  "label": "No Detection",
+  "detection_count": 0,
+  "raw_detections": [],
+  "low_conf_probe_detection_count": 0,
+  "low_conf_probe_detections": [],
+  "stage2_detections": [],
+  "mask_max": 0.0,
+  "cam_max": 0.0
+}

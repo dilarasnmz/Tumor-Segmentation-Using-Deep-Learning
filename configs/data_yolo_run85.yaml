@@ -1,0 +1,7 @@
+path: C:\Users\dilar\OneDrive\Desktop\Tumor-Segmentation-Using-Deep-Learning\data\yolo_run85
+train: images/train
+val: images/val
+nc: 2
+names:
+  0: BENIGN
+  1: MALIGNANT

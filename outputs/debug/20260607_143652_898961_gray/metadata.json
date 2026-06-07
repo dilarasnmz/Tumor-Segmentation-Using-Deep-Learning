@@ -1,0 +1,10 @@
+{
+  "image_path": "tmp_format_check/gray.tif",
+  "mode": "run85",
+  "label": "No Detection",
+  "detection_count": 0,
+  "raw_detections": [],
+  "stage2_detections": [],
+  "mask_max": 0.0,
+  "cam_max": 0.0
+}

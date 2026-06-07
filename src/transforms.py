@@ -189,3 +189,54 @@ def build_val_pipeline():
             ),
         ]
     )
+
+
+def profile_window_and_clahe(gray_image: np.ndarray) -> np.ndarray:
+    """
+    Notebook-aligned grayscale preprocessing:
+    profile windowing over breast tissue + CLAHE enhancement.
+    """
+    img = gray_image.astype(np.float32)
+    profile = img > (img.max() * 0.05)
+
+    if profile.any():
+        lo = img[profile].min()
+        hi = img[profile].max()
+    else:
+        lo = img.min()
+        hi = img.max()
+
+    img = np.clip((img - lo) / (hi - lo + 1e-6), 0.0, 1.0)
+    img = (img * 255.0).astype(np.uint8)
+    return cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)).apply(img)
+
+
+def make_fused_3ch(rgb_crop: np.ndarray) -> np.ndarray:
+    """
+    Notebook final fusion channels:
+    Ch0=CLAHE, Ch1=unsharp mask, Ch2=top-hat.
+    """
+    gray = cv2.cvtColor(rgb_crop, cv2.COLOR_RGB2GRAY)
+
+    ch0 = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)).apply(gray)
+
+    blurred = cv2.GaussianBlur(gray, (0, 0), 3.0)
+    ch1 = np.clip(
+        gray.astype(np.float32) * 1.5 - blurred.astype(np.float32) * 0.5,
+        0,
+        255,
+    ).astype(np.uint8)
+
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))
+    ch2 = cv2.morphologyEx(gray, cv2.MORPH_TOPHAT, kernel)
+
+    return cv2.merge([ch0, ch1, ch2])
+
+
+def resize_and_normalize_rgb(image_rgb: np.ndarray, size: int = 512) -> np.ndarray:
+    """
+    Resize and scale RGB image to [-1, 1], matching notebook model input convention.
+    """
+    resized = cv2.resize(image_rgb, (size, size), interpolation=cv2.INTER_LINEAR)
+    normalized = (resized.astype(np.float32) / 255.0 - 0.5) / 0.5
+    return normalized

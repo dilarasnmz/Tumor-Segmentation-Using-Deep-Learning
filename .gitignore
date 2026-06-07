@@ -205,3 +205,31 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# ── Project-specific ignores ────────────────────────────────────────────────
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Temporary test artefacts
+tmp_format_check/
+
+# Training run outputs
+runs/
+outputs/yolo_run85/
+
+# Archive folder (safe backup, not tracked)
+_archive/
+
+# Large dataset files
+data/CBIS-DDSM-512-FULL1/
+data/yolo_run85/
+
+# Model weight files (large binaries – track via Git LFS or external storage)
+*.pt
+*.pth
+
+# Keep deployed inference models explicitly:
+!models/best_yolo.pt
+!models/best_classifier.pth
+!models/best_model.pth

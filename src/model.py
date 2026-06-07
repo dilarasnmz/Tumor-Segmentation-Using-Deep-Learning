@@ -137,6 +137,33 @@ class MTL_EfficientUNetPlusPlus(nn.Module):
         return seg_mask, class_score
 
 
+class Run85UNetPlusPlus(nn.Module):
+    """
+    Notebook Run 8.5 compatible architecture.
+
+    - Unet++ with EfficientNet-B0 encoder
+    - 3-channel fused input
+    - segmentation head (1 channel) + 2-class auxiliary classifier
+
+    Kept as an additional model option so current deployed GUI weights
+    (`models/best_model.pth`) remain fully compatible with
+    `MTL_EfficientUNetPlusPlus`.
+    """
+
+    def __init__(self, encoder_weights=None):
+        super().__init__()
+        self.model = smp.UnetPlusPlus(
+            encoder_name="efficientnet-b0",
+            encoder_weights=encoder_weights,
+            in_channels=3,
+            classes=1,
+            aux_params=dict(classes=2, dropout=0.5, pooling="avg"),
+        )
+
+    def forward(self, x):
+        return self.model(x)
+
+
 class BinaryFocalLoss(nn.Module):
     """
     Binary focal loss for benign/malignant classification.

@@ -1,0 +1,28 @@
+project:
+  name: Tumor-Segmentation-Using-Deep-Learning
+
+model:
+  # Primary YOLO-based two-stage pipeline
+  segmentation_model_path: models/best_yolo.pt
+  classifier_model_path: models/best_classifier.pth
+  # Legacy single-model fallback (used only when YOLO models are missing)
+  legacy_backup_model_path: models/best_model.pth
+  # Prefer YOLO pipeline when available (set to false only for explicit legacy-only mode)
+  prefer_yolo: true
+  
+  # Inference parameters
+  image_size: 512
+  confidence_threshold: 0.01
+  mask_threshold: 0.5
+  yolo_iou: 0.8
+  yolo_topk: 3
+  second_nms_iou: 0.3
+  physical_window_px: 320
+
+paths:
+  master_csv: data/CBIS_Master_Index.csv
+  dataset_root: data/CBIS-DDSM-512-FULL1/CBIS-DDSM-512-FULL1
+  figures_dir: outputs/figures
+  metrics_dir: outputs/metrics
+  final_notebook: notebooks/final_experiment.ipynb
+  archived_notebooks_dir: notebooks/archive
