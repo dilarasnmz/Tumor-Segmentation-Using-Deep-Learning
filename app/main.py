@@ -682,6 +682,7 @@ class ResultsPage(QWidget):
             writer.setResolution(300)
             
             painter = QPainter(writer)
+            painter.setPen(QPen(QColor(0, 0, 0))) # Force black text in PDF
             
             # Title
             font = painter.font()
@@ -812,7 +813,7 @@ class MainWindow(QMainWindow):
         self.results_page.rerun_clicked.connect(self.start_analysis)
 
     def _apply_styles(self) -> None:
-        self.setStyleSheet(
+        QApplication.instance().setStyleSheet(
             """
             QMainWindow,
             QStackedWidget {
@@ -824,6 +825,21 @@ class MainWindow(QMainWindow):
                 color: #172033;
                 font-family: "Segoe UI", Arial, sans-serif;
                 font-size: 13px;
+            }
+
+            QMessageBox {
+                background: #eef5f7;
+                color: #172033;
+            }
+
+            QMessageBox QLabel {
+                color: #172033;
+            }
+
+            QMessageBox QPushButton {
+                background: #ffffff;
+                border: 1px solid #d1d5db;
+                color: #374151;
             }
 
             QFrame#pageHeader {
